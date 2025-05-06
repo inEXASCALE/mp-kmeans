@@ -18,7 +18,12 @@ Details on the underlying algorithms can be found in the technical report:
 
 One can install them before running our code via:
 ```Bash
-pip install pychop classixclustering torch tqdm scikit-learn opencv-python
+pip install classixclustering torch tqdm scikit-learn opencv-python
+```
+
+We also requires the installation of ``pychop`` of version 0.3.0, to install, use:
+```Bash
+ pip install pychop==0.3.0 
 ```
 
 
