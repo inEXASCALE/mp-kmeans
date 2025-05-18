@@ -85,18 +85,17 @@ References
 ------------
 
 ```
-C., Erin, X. Chen, X. Liu. “Computing $k$-means in mixed precision.” (2024).
+E. Carson, X. Chen, and X. Liu. Computing k-means in mixed precision. ArXiv:2407.12208 [math.NA], July 2024.
 ```
 
 The bibtex:
 ```bibtex
-@misc{carson2024,
-     title={Computing $k$-means in mixed precision}, 
-     author={Erin Carson and Xinye Chen and Xiaobo Liu},
-     year={2024},
-     eprint={2407.12208},
-     archivePrefix={arXiv},
-     primaryClass={math.NA},
-     url={https://arxiv.org/abs/2407.12208}, 
+@techreport{ccl24,
+  author = "Erin Carson and Xinye Chen and Xiaobo Liu",
+  title = "Computing $k$-means in Mixed Precision",
+  month = jul,
+  year = 2024,
+  type = "{ArXiv}:2407.12208 [math.{NA}]",
+  url = "https://arxiv.org/abs/2407.12208"
 }
 ```
