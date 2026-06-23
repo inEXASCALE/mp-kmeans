@@ -3,6 +3,7 @@
 
 [![!pypi](https://img.shields.io/pypi/v/mp-kmeans?color=yellowgreen)](https://pypi.org/project/mp-kmeans/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mp-kmeans)](https://pypi.org/project/mp-kmeans/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)  
 
 A mixed-precision algorithm of $k$-means is designed towards understanding of the low precision arithmetic for Euclidean distance computations.  By performing simulations across data with various settings, we showcase that decreased precision for $k$-means computing only results in a minor increase in sum of squared errors while not necessarily leading to degrading performance regarding clustering results.  
 
