@@ -66,7 +66,7 @@ print(model.n_iter_, model.inertia_)
   author = "Erin Carson and Xinye Chen and Xiaobo Liu",
   title = "Computing $k$-means in Mixed Precision",
   month = jul,
-  year = 2024,
+  year = 2026,
   type = "{ArXiv}:2407.12208 [math.{NA}]",
   url = "https://arxiv.org/abs/2407.12208"
 }
