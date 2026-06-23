@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68", "wheel", "numpy>=1.21"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mp-kmeans"
+version = "0.1.0"
+description = "CUDA-accelerated mixed-precision k-means clustering for large-scale data."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [
+  { name = "InEXASCALE" }
+]
+maintainers = [
+  { name = "Erin Carson, Xinye Chen, Xiaobo Liu", email = "xinyechenai@gmail.com" }
+]
+keywords = ["kmeans", "clustering", "mixed-precision", "cuda", "pytorch"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Information Analysis"
+]
+dependencies = [
+  "numpy>=1.21",
+  "torch>=2.0",
+  "scikit-learn>=1.0",
+  "classixclustering",
+  "pychop"
+]
+
+[project.urls]
+Homepage = "https://github.com/inEXASCALE/mp-kmeans"
+Repository = "https://github.com/inEXASCALE/mp-kmeans"
+Issues = "https://github.com/inEXASCALE/mp-kmeans/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["mp_kmeans*"]
+
+[tool.setuptools.package-data]
+mp_kmeans = ["*.so"]

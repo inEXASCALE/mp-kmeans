@@ -1,0 +1,122 @@
+Metadata-Version: 2.4
+Name: mp-kmeans
+Version: 0.1.0
+Summary: CUDA-accelerated mixed-precision k-means clustering for large-scale data.
+Author: InEXASCALE
+Maintainer-email: "Erin Carson, Xinye Chen, Xiaobo Liu" <xinyechenai@gmail.com>
+License: MIT License
+        
+        Copyright (c) 2024 open-sciml
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Project-URL: Homepage, https://github.com/inEXASCALE/mp-kmeans
+Project-URL: Repository, https://github.com/inEXASCALE/mp-kmeans
+Project-URL: Issues, https://github.com/inEXASCALE/mp-kmeans/issues
+Keywords: kmeans,clustering,mixed-precision,cuda,pytorch
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Science/Research
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy>=1.21
+Requires-Dist: torch>=2.0
+Requires-Dist: scikit-learn>=1.0
+Requires-Dist: classixclustering
+Requires-Dist: pychop
+Dynamic: license-file
+
+# mp-kmeans
+
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mp-kmeans)](https://pypi.org/project/mp-kmeans/)
+
+A mixed-precision algorithm of $k$-means is designed towards understanding of the low precision arithmetic for Euclidean distance computations.  By performing simulations across data with various settings, we showcase that decreased precision for $k$-means computing only results in a minor increase in sum of squared errors while not necessarily leading to degrading performance regarding clustering results.  
+
+`mp-kmeans` is a CUDA-accelerated mixed-precision implementation of k-means designed for large-scale clustering workloads.
+It provides multiple precision paths (FP16/BF16/FP32/FP64 and mixed fallback modes) to balance throughput and numerical stability.
+
+## Features
+
+- Mixed-precision Euclidean distance kernels for GPU k-means.
+- Uniform precision modes (`fp16`, `bf16`, `fp32`, `fp64`) and mixed modes (e.g. `fp16_fp32`, `fp16_fp64`).
+- CUDA center update kernels with automatic empty-cluster reinitialization.
+- Configurable normalization (`standard`, `l2`, `minmax`) for robust behavior on unnormalized datasets.
+
+## Installation
+
+```bash
+pip install mp-kmeans
+```
+
+> This package targets CUDA-enabled environments and depends on PyTorch with CUDA support.
+
+## Quick Start
+
+```python
+import torch
+from mp_kmeans import KMeansPlusPlus, make_blobs_gpu
+
+X, _ = make_blobs_gpu(
+    n_samples=100_000,
+    n_features=128,
+    n_centers=100,
+    cluster_std=1.0,
+    random_state=42,
+)
+
+model = KMeansPlusPlus(
+    n_clusters=100,
+    kernel="fp16_fp32",
+    kappa=10.0,
+    max_iter=300,
+    tol=1e-8,
+    normalize="standard",
+    random_state=42,
+)
+
+model.fit(X)
+print(model.n_iter_, model.inertia_)
+```
+
+## Kernel Modes
+
+- Uniform: `fp16_uniform`, `bf16_uniform`, `tf32_uniform`, `fp32_uniform`, `fp64_uniform`
+- Mixed: `fp16_fp32`, `bf16_fp32`, `fp32_fp32`, `fp16_fp64`, `bf16_fp64`, `tf32_fp64`, `fp32_fp64`
+- Advanced: `fp64_fp16`, `fp64_bf16`, `fp64_tf32`, `fp64_fp32_gemm`
+
+## Citation
+
+```bibtex
+@techreport{ccl24,
+  author = "Erin Carson and Xinye Chen and Xiaobo Liu",
+  title = "Computing $k$-means in Mixed Precision",
+  month = jul,
+  year = 2024,
+  type = "{ArXiv}:2407.12208 [math.{NA}]",
+  url = "https://arxiv.org/abs/2407.12208"
+}
+```

@@ -1,11 +1,12 @@
 """
 KMeans++ with Multi-Precision Support and Normalization
 """
-import torch
-import numpy as np
+import math
 import time
 from typing import Optional, Tuple, Literal
-import euclidean_cuda
+
+import torch
+from . import euclidean_cuda
 
 
 class KMeansPlusPlus:
@@ -17,6 +18,10 @@ class KMeansPlusPlus:
     - 'l2': L2 normalization (unit vectors)
     - 'standard': Standardization (zero mean, unit variance)
     - 'minmax': Min-max scaling to [0, 1]
+
+    K-means|| controls:
+    - km_parallel_oversampling: oversampling factor l (None -> 2*k)
+    - km_parallel_rounds: number of sampling rounds (None -> ceil(log2(N+1)))
     """
     
     def __init__(
@@ -35,6 +40,8 @@ class KMeansPlusPlus:
         random_state: Optional[int] = None,
         init_method: Literal['kmeans++', 'random', 'k-means||'] = 'random',
         verbose: bool = False,
+        km_parallel_oversampling: Optional[int] = None,
+        km_parallel_rounds: Optional[int] = None,
     ):  
         self.init_method = init_method
         self.n_clusters = n_clusters
@@ -45,6 +52,8 @@ class KMeansPlusPlus:
         self.normalize = normalize
         self.random_state = random_state
         self.verbose = verbose
+        self.km_parallel_oversampling = km_parallel_oversampling
+        self.km_parallel_rounds = km_parallel_rounds
         
         # Normalization parameters (learned from training data)
         self.mean_ = None
