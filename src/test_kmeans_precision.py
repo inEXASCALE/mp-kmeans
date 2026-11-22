@@ -326,8 +326,8 @@ def run_comprehensive_benchmark(
 
     # Define kernels to test
     kernels_uniform = [
-        ('FP16 (uniform, PyTorch)', 'fp16_uniform', 5.0),
-        ('BF16 (uniform, PyTorch)', 'bf16_uniform', 5.0),
+        ('FP16 (uniform, expanded)', 'fp16_uniform', 5.0),
+        ('BF16 (uniform, expanded)', 'bf16_uniform', 5.0),
         ('FP32 (uniform, PyTorch)', 'fp32', 5.0),
         ('FP64 (uniform, PyTorch)', 'fp64', 100.0),
     ]
@@ -339,7 +339,6 @@ def run_comprehensive_benchmark(
         ('FP32+FP32 (mixed)', 'fp32_fp32', kappa_values),
         ('FP16+FP64 (mixed)', 'fp16_fp64', kappa_values),
         ('BF16+FP64 (mixed)', 'bf16_fp64', kappa_values),
-        # ('TF32+FP64 (mixed)', 'tf32_fp64', kappa_values),
         ('FP32+FP64 (mixed)', 'fp32_fp64', kappa_values),
     ]
     
@@ -349,7 +348,7 @@ def run_comprehensive_benchmark(
 
     # Test uniform precision
     print("\n" + "="*100)
-    print("CATEGORY 1: UNIFORM PRECISION (PyTorch native, No fallback)")
+    print("CATEGORY 1: UNIFORM PRECISION (PyTorch baselines)")
     print("="*100)
     
     for name, kernel, kappa in kernels_uniform:
@@ -365,10 +364,13 @@ def run_comprehensive_benchmark(
             print(f" {name:<30} | FAILED")
 
     print(f"\n{'='*100}")
-    print("CATEGORY 2: MIXED PRECISION (Low-precision primary + FP64 fallback)")
+    print("CATEGORY 2: EUCLIMIX (FP32 or FP64 fallback)")
     print("="*100)
     
     for name, kernel, kappas in kernels_mixed_mix:
+        if kernel.startswith('bf16_') and torch.cuda.get_device_capability(X.device) < (8, 0):
+            print(f"{name:<30} | SKIPPED (requires SM80+)")
+            continue
         for kappa in kappas:
             result = benchmark_kernel(X, y_true, n_clusters, kernel, kappa, n_runs, verbose)
             if result:

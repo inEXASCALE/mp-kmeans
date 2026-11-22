@@ -6,7 +6,24 @@ import time
 from typing import Optional, Tuple, Literal
 
 import torch
-from . import euclidean_cuda
+from euclimix import direct_squared_distances, pairwise_squared_distances
+
+
+_MIXED_KERNELS = {
+    'fp16_fp32', 'bf16_fp32', 'fp32_fp32',
+    'fp16_fp64', 'bf16_fp64', 'fp32_fp64',
+}
+_BASELINE_DTYPES = {
+    'fp16': torch.float16,
+    'bf16': torch.bfloat16,
+    'fp32': torch.float32,
+    'fp64': torch.float64,
+    'fp16_uniform': torch.float16,
+    'bf16_uniform': torch.bfloat16,
+    'tf32_uniform': torch.float32,
+    'fp32_uniform': torch.float32,
+    'fp64_uniform': torch.float64,
+}
 
 
 class KMeansPlusPlus:
@@ -29,10 +46,10 @@ class KMeansPlusPlus:
         n_clusters: int,
         kernel: Literal[
             'fp16', 'bf16', 'fp32', 'fp64',
-            'fp16_uniform', 'bf16_uniform', 'tf32_uniform',
-            'fp16_fp64', 'bf16_fp64', 'tf32_fp64', 'fp32_fp64',
-            'fp64_fp16', 'fp64_bf16', 'fp64_tf32', 'fp64_fp32_gemm'
-        ] = 'fp32',
+            'fp16_uniform', 'bf16_uniform', 'tf32_uniform', 'fp32_uniform', 'fp64_uniform',
+            'fp16_fp32', 'bf16_fp32', 'fp32_fp32',
+            'fp16_fp64', 'bf16_fp64', 'fp32_fp64',
+        ] = 'fp32_fp32',
         kappa: float = 5.0,
         max_iter: int = 300,
         tol: float = 1e-4,
@@ -42,7 +59,10 @@ class KMeansPlusPlus:
         verbose: bool = False,
         km_parallel_oversampling: Optional[int] = None,
         km_parallel_rounds: Optional[int] = None,
-    ):  
+    ):
+        if kernel not in _MIXED_KERNELS and kernel not in _BASELINE_DTYPES:
+            supported = sorted(_MIXED_KERNELS | _BASELINE_DTYPES.keys())
+            raise ValueError(f"Unknown kernel {kernel!r}. Supported kernels: {', '.join(supported)}")
         self.init_method = init_method
         self.n_clusters = n_clusters
         self.kernel = kernel
@@ -69,25 +89,7 @@ class KMeansPlusPlus:
         self.timing_ = {}
         
     def _get_dtype(self):
-        """Get appropriate dtype for kernel"""
-        dtype_map = {
-            'fp16': torch.float16,
-            'bf16': torch.bfloat16,
-            'fp32': torch.float32,
-            'fp64': torch.float64,
-            'fp16_uniform': torch.float16,
-            'bf16_uniform': torch.bfloat16,
-            'tf32_uniform': torch.float32,
-            'fp16_fp64': torch.float16,
-            'bf16_fp64': torch.bfloat16,
-            'tf32_fp64': torch.float32,
-            'fp32_fp64': torch.float32,
-            'fp64_fp16': torch.float16,
-            'fp64_bf16': torch.bfloat16,
-            'fp64_tf32': torch.float32,
-            'fp64_fp32_gemm': torch.float64,
-        }
-        return dtype_map.get(self.kernel, torch.float32)
+        return _BASELINE_DTYPES.get(self.kernel, torch.float32)
     
     def _normalize_data(self, X: torch.Tensor, fit: bool = True) -> torch.Tensor:
         """
@@ -102,8 +104,10 @@ class KMeansPlusPlus:
         """
         if self.normalize is None:
             return X
-        
-        
+
+        if self.kernel in _MIXED_KERNELS and X.dtype not in (torch.float32, torch.float64):
+            X = X.float()
+
         if self.normalize == 'l2':
             # L2 normalization (unit vectors)
             norms = torch.norm(X, p=2, dim=1, keepdim=True)
@@ -114,7 +118,7 @@ class KMeansPlusPlus:
             # Standardization (zero mean, unit variance)
             if fit:
                 self.mean_ = X.mean(dim=0, keepdim=True)
-                self.std_ = X.std(dim=0, keepdim=True)
+                self.std_ = X.std(dim=0, keepdim=True, correction=int(X.shape[0] > 1))
                 self.std_ = torch.clamp(self.std_, min=1e-8)  # Avoid division by zero
             
             X_norm = (X - self.mean_) / self.std_
@@ -136,317 +140,114 @@ class KMeansPlusPlus:
         return X_norm
     
     def _compute_distances(self, X: torch.Tensor, centers: torch.Tensor) -> torch.Tensor:
-        """Compute distances using specified kernel"""
-        
-        # Ensure correct dtype for uniform CUDA kernels
-        if self.kernel == 'fp16_uniform':
-            # Convert to FP16 if needed
-            if X.dtype != torch.float16:
-                X = X.half()
-            if centers.dtype != torch.float16:
-                centers = centers.half()
-            # Output is FP16, convert to FP32 for consistency
-            D = euclidean_cuda.pairwise_euclidean_uniform_fp16(X, centers)
-            return D.float()  # Convert to FP32 for label assignment
-        
-        elif self.kernel == 'bf16_uniform':
-            if X.dtype != torch.bfloat16:
-                X = X.to(torch.bfloat16)
-            if centers.dtype != torch.bfloat16:
-                centers = centers.to(torch.bfloat16)
-            D = euclidean_cuda.pairwise_euclidean_uniform_bf16(X, centers)
-            return D.float()
-        
-        elif self.kernel == 'tf32_uniform':
-            if X.dtype != torch.float32:
-                X = X.float()
-            if centers.dtype != torch.float32:
-                centers = centers.float()
-            return euclidean_cuda.pairwise_euclidean_uniform_tf32(X, centers)
-        
-        elif self.kernel == 'fp32_uniform':
-            if X.dtype != torch.float32:
-                X = X.float()
-                centers = centers.float()
-            return euclidean_cuda.pairwise_euclidean_single(X, centers)
-        
-        elif self.kernel == 'fp64_uniform':
-            if X.dtype != torch.float64:
-                X = X.double()
-                centers = centers.double()
-            return euclidean_cuda.pairwise_euclidean_double(X, centers)
+        if self.kernel in _MIXED_KERNELS:
+            precision, correction = self.kernel.split('_')
+            return pairwise_squared_distances(
+                X.float(), centers.float(), precision=precision, correction=correction, rho=self.kappa,
+            )
 
-        # PyTorch native uniform (original)
-        elif self.kernel == 'fp16':
-            if X.dtype != torch.float16:
-                X = X.half()
-            if centers.dtype != torch.float16:
-                centers = centers.half()
-            D = torch.cdist(X, centers, p=2.0) ** 2
-            return D.float()
-        
-        elif self.kernel == 'bf16':
-            if X.dtype != torch.bfloat16:
-                X = X.to(torch.bfloat16)
-            if centers.dtype != torch.bfloat16:
-                centers = centers.to(torch.bfloat16)
-            D = torch.cdist(X, centers, p=2.0) ** 2
-            return D.float()
-        
-        elif self.kernel == 'fp32':
-            if X.dtype != torch.float32:
-                X = X.float()
-            if centers.dtype != torch.float32:
-                centers = centers.float()
-            return torch.cdist(X, centers, p=2.0) ** 2
-        
-        elif self.kernel == 'fp64':
-            if X.dtype != torch.float64:
-                X = X.double()
-            if centers.dtype != torch.float64:
-                centers = centers.double()
-            return torch.cdist(X, centers, p=2.0) ** 2
-        
-        # Mixed-precision modes
-        elif self.kernel == 'fp16_fp64':
-            if X.dtype != torch.float32:
-                X = X.float()
-            if centers.dtype != torch.float32:
-                centers = centers.float()
-            return euclidean_cuda.pairwise_euclidean_fp16_fp64(X, centers, self.kappa)
-        
-        elif self.kernel == 'bf16_fp64':
-            if X.dtype != torch.float32:
-                X = X.float()
-            if centers.dtype != torch.float32:
-                centers = centers.float()
-            return euclidean_cuda.pairwise_euclidean_bf16_fp64(X, centers, self.kappa)
-        
-        elif self.kernel == 'tf32_fp64':
-            if X.dtype != torch.float32:
-                X = X.float()
-            if centers.dtype != torch.float32:
-                centers = centers.float()
-            return euclidean_cuda.pairwise_euclidean_tf32_fp64(X, centers, self.kappa)
-        
-        elif self.kernel == 'fp32_fp64':
-            if X.dtype != torch.float32:
-                X = X.float()
-            if centers.dtype != torch.float32:
-                centers = centers.float()
-            return euclidean_cuda.pairwise_euclidean_fp32_fp64(X, centers, self.kappa)
-        
-        # Mixed-precision modes
-        elif self.kernel == 'fp16_fp32':
-            if X.dtype != torch.float32:
-                X = X.float()
-            if centers.dtype != torch.float32:
-                centers = centers.float()
-            return euclidean_cuda.pairwise_euclidean_fp16_fp32(X, centers, self.kappa)
-        
-        elif self.kernel == 'bf16_fp32':
-            if X.dtype != torch.float32:
-                X = X.float()
-            if centers.dtype != torch.float32:
-                centers = centers.float()
-            return euclidean_cuda.pairwise_euclidean_bf16_fp32(X, centers, self.kappa)
-        
-        elif self.kernel == 'fp32_fp32':
-            if X.dtype != torch.float32:
-                X = X.float()
-            if centers.dtype != torch.float32:
-                centers = centers.float()
-            return euclidean_cuda.pairwise_euclidean_fp32_fp32(X, centers, self.kappa)
-        
-        # Advanced modes
-        elif self.kernel == 'fp64_fp16':
-            if X.dtype != torch.float16:
-                X = X.half()
-            if centers.dtype != torch.float16:
-                centers = centers.half()
-            return euclidean_cuda.pairwise_euclidean_fp64_fp16(X, centers, self.kappa)
-        
-        elif self.kernel == 'fp64_bf16':
-            if X.dtype != torch.bfloat16:
-                X = X.to(torch.bfloat16)
-            if centers.dtype != torch.bfloat16:
-                centers = centers.to(torch.bfloat16)
-            return euclidean_cuda.pairwise_euclidean_fp64_bf16(X, centers, self.kappa)
-        
-        elif self.kernel == 'fp64_tf32':
-            if X.dtype != torch.float32:
-                X = X.float()
-            if centers.dtype != torch.float32:
-                centers = centers.float()
-            return euclidean_cuda.pairwise_euclidean_fp64_tf32(X, centers, self.kappa)
-        
-        elif self.kernel == 'fp64_fp32_gemm':
-            if X.dtype != torch.float64:
-                X = X.double()
-            if centers.dtype != torch.float64:
-                centers = centers.double()
-            return euclidean_cuda.pairwise_euclidean_fp64_fp32_gemm(X, centers, self.kappa)
-        
+        dtype = _BASELINE_DTYPES[self.kernel]
+        X, centers = X.to(dtype), centers.to(dtype)
+        low_precision = dtype in (torch.float16, torch.bfloat16)
+        if self.kernel.endswith('_uniform'):
+            # The uniform baselines store the norms and cross products in the
+            # selected dtype before forming the expanded squared distance.
+            points = X.float() if low_precision else X
+            refs = centers.float() if low_precision else centers
+            x_norm = points.square().sum(dim=1, keepdim=True).to(dtype).to(points.dtype)
+            c_norm = refs.square().sum(dim=1).to(dtype).to(points.dtype)
+            distances = (X @ centers.T).to(points.dtype)
+            distances.mul_(-2).add_(x_norm).add_(c_norm)
+            distances = torch.fmax(distances, distances.new_zeros(())).to(dtype)
+        elif low_precision:
+            distances = torch.cdist(X, centers, compute_mode='use_mm_for_euclid_dist').square()
         else:
-            raise ValueError(f"Unknown kernel: {self.kernel}")
-    
+            distances = torch.cdist(X, centers).square()
+        return distances.float() if low_precision else distances
 
-    def fit(self, X: torch.Tensor, C: torch.Tensor=None) -> 'KMeansPlusPlus':
-        """
-        Fit KMeans model
-        
-        Args:
-            X: Data tensor (N, D)
-        
-        Returns:
-            self
-        """
+    def _update_centers(
+        self, X: torch.Tensor, labels: torch.Tensor, generator: Optional[torch.Generator],
+    ) -> torch.Tensor:
+        counts = torch.bincount(labels, minlength=self.n_clusters)
+        sums = X.new_zeros((self.n_clusters, X.shape[1]))
+        sums.index_add_(0, labels, X)
+        centers = sums / counts.clamp_min(1).unsqueeze(1)
+
+        empty = (counts == 0).nonzero(as_tuple=True)[0]
+        if empty.numel():
+            rows = torch.randint(X.shape[0], (empty.numel(),), device=X.device, generator=generator)
+            centers[empty] = X[rows]
+        return centers
+
+    @torch.no_grad()
+    def fit(self, X: torch.Tensor, C: Optional[torch.Tensor] = None) -> 'KMeansPlusPlus':
+        """Fit the model on X. Optional initial centers C are in normalized space."""
+        X = X.detach()
+        if X.ndim != 2 or min(X.shape) == 0:
+            raise ValueError("X must be a nonempty matrix of shape (n_samples, n_features)")
+        if self.n_clusters < 1:
+            raise ValueError("n_clusters must be positive")
         if not X.is_cuda:
             X = X.cuda()
-        
-        # Normalize data (fit normalization parameters)
+
         t_norm_start = time.time()
         X_normalized = self._normalize_data(X, fit=True)
         t_norm = time.time() - t_norm_start
-        
         if self.verbose and self.normalize:
             print(f"Normalization ({self.normalize}): {t_norm:.4f}s")
-        
-        # Convert to appropriate dtype
+
         target_dtype = self._get_dtype()
-        
-        N, D = X_normalized.shape
-        
-        if C is not None:
-            if C.shape != (self.n_clusters, D):
-                raise ValueError(f"Provided centers C must have shape ({self.n_clusters}, {D})")
-            centers = C.to(X_normalized.device).to(target_dtype)
-            self.timing_['init'] = 0.0
-        else:
-            # Initialize centers
+        points_for_distances = X_normalized.to(target_dtype)
+        update_dtype = torch.float64 if target_dtype == torch.float64 else torch.float32
+        points_for_update = X_normalized.to(update_dtype)
+        generator = self._make_generator(X.device) if self.random_state is not None else None
+
+        if C is None:
             t0 = time.time()
-            centers = self._init_centers(X_normalized)
+            centers = self._init_centers(X_normalized).to(target_dtype)
             self.timing_['init'] = time.time() - t0
+        else:
+            shape = (self.n_clusters, X.shape[1])
+            if C.shape != shape:
+                raise ValueError(f"Provided centers C must have shape {shape}")
+            centers = C.detach().to(device=X.device, dtype=target_dtype)
+            self.timing_['init'] = 0.0
 
         self.timing_['normalization'] = t_norm
-        
-        # Lloyd's algorithm
         self.timing_['iterations'] = []
-        
-        if self.kernel == "fp64":
-            for iteration in range(self.max_iter):
-                iter_start = time.time()
-                
-                # E-step: Assign points to nearest center
-                distances = self._compute_distances(X_normalized.to(target_dtype), centers)
-                
-                # Handle different output dtypes
-                if distances.dtype in [torch.float16, torch.bfloat16]:
-                    distances_float = distances.float()
-                else:
-                    distances_float = distances
-                
-                labels = distances_float.argmin(dim=1)
-                
-                # M-step: Update centers using CUDA kernel (FAST!)
-                new_centers = euclidean_cuda.update_centers_fp64_with_reinit(
-                    X_normalized.double(),  # Convert to FP64 for center computation
-                    labels,
-                    self.n_clusters
-                )
-                new_centers = new_centers.to(target_dtype)
-                
-                # Check convergence
-                center_shift = torch.norm(new_centers.float() - centers.float()).item()
-                centers = new_centers
-                
-                iter_time = time.time() - iter_start
-                self.timing_['iterations'].append(iter_time)
-                
+        for iteration in range(self.max_iter):
+            iter_start = time.time()
+            labels = self._compute_distances(points_for_distances, centers).argmin(dim=1)
+            new_centers = self._update_centers(points_for_update, labels, generator).to(target_dtype)
+            center_shift = torch.norm(new_centers.float() - centers.float()).item()
+            centers = new_centers
+
+            iter_time = time.time() - iter_start
+            self.timing_['iterations'].append(iter_time)
+            if self.verbose:
+                print(f"Iteration {iteration + 1}: shift={center_shift:.6f}, time={iter_time:.4f}s")
+            if center_shift < self.tol:
                 if self.verbose:
-                    print(f"Iteration {iteration+1}: shift={center_shift:.6f}, time={iter_time:.4f}s")
-                
-                if center_shift < self.tol:
-                    if self.verbose:
-                        print(f"Converged at iteration {iteration+1}")
-                    break
-            
-        else:
-            for iteration in range(self.max_iter):
-                iter_start = time.time()
-                
-                # E-step: Assign points to nearest center
-                distances = self._compute_distances(X_normalized.to(target_dtype), centers)
-                
-                # Handle different output dtypes
-                if distances.dtype in [torch.float16, torch.bfloat16]:
-                    distances_float = distances.float()
-                else:
-                    distances_float = distances
-                
-                labels = distances_float.argmin(dim=1)
-                
-                # M-step: Update centers using CUDA kernel (FAST!)
-                new_centers = euclidean_cuda.update_centers_fp32_with_reinit(
-                    X_normalized.float(),  # Convert to FP32 for center computation
-                    labels,
-                    self.n_clusters
-                )
-                new_centers = new_centers.to(target_dtype)
-                
-                # Check convergence
-                center_shift = torch.norm(new_centers.float() - centers.float()).item()
-                centers = new_centers
-                
-                iter_time = time.time() - iter_start
-                self.timing_['iterations'].append(iter_time)
-                
-                if self.verbose:
-                    print(f"Iteration {iteration+1}: shift={center_shift:.6f}, time={iter_time:.4f}s")
-                
-                if center_shift < self.tol:
-                    if self.verbose:
-                        print(f"Converged at iteration {iteration+1}")
-                    break
-            
-        self.n_iter_ = iteration + 1
-        
-        # Final assignment
-        distances = self._compute_distances(X_normalized.to(target_dtype), centers)
-        if distances.dtype in [torch.float16, torch.bfloat16]:
-            distances = distances.float()
-        
-        self.labels_ = distances.argmin(dim=1)
-        self.cluster_centers_ = centers  # Centers are in normalized space
-        
-        # Compute inertia
-        min_dists = distances.min(dim=1).values
+                    print(f"Converged at iteration {iteration + 1}")
+                break
+
+        self.n_iter_ = len(self.timing_['iterations'])
+        min_dists, self.labels_ = self._compute_distances(points_for_distances, centers).min(dim=1)
+        self.cluster_centers_ = centers
         self.inertia_ = min_dists.sum().item()
-        
-        # Total timing
-        self.timing_['total'] = sum(self.timing_['iterations']) + self.timing_['init'] + self.timing_['normalization']
-        
+        self.timing_['total'] = sum(self.timing_['iterations']) + self.timing_['init'] + t_norm
         return self
-    
+
+    @torch.no_grad()
     def predict(self, X: torch.Tensor) -> torch.Tensor:
-        """Predict cluster labels for X"""
+        """Predict cluster labels for X."""
         if self.cluster_centers_ is None:
             raise RuntimeError("Model not fitted yet")
-        
-        if not X.is_cuda:
-            X = X.cuda()
-        
-        # Normalize using learned parameters
+
+        X = X.detach().to(self.cluster_centers_.device)
         X_normalized = self._normalize_data(X, fit=False)
-        
-        target_dtype = self._get_dtype()
-        
-        distances = self._compute_distances(X_normalized.to(target_dtype), self.cluster_centers_)
-        if distances.dtype in [torch.float16, torch.bfloat16]:
-            distances = distances.float()
-        
-        return distances.argmin(dim=1)
-    
+        return self._compute_distances(X_normalized, self.cluster_centers_).argmin(dim=1)
+
     def fit_predict(self, X: torch.Tensor) -> torch.Tensor:
         """Fit and return cluster labels"""
         self.fit(X)
@@ -500,13 +301,13 @@ class KMeansPlusPlus:
         return g
 
     def _sq_euclidean_distances_to_point(self, X: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+        if self.kernel in _MIXED_KERNELS:
+            return direct_squared_distances(X, x.unsqueeze(0), precision='fp32').squeeze(1)
         diff = X - x.unsqueeze(0)
-        return (diff * diff).sum(dim=1)
+        return diff.square().sum(dim=1)
 
     def _assign_to_centers(self, X: torch.Tensor, centers: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        X32 = X if X.dtype == torch.float32 else X.float()
-        C32 = centers if centers.dtype == torch.float32 else centers.float()
-        dists = torch.cdist(X32, C32, p=2.0) ** 2
+        dists = self._sq_euclidean_distances_to_centers(X, centers)
         min_sq_dists, labels = dists.min(dim=1)
         return labels, min_sq_dists
 
@@ -633,14 +434,11 @@ class KMeansPlusPlus:
         return centers
         
     def _sq_euclidean_distances_to_centers(self, X: torch.Tensor, centers: torch.Tensor) -> torch.Tensor:
-        """
-        Compute squared Euclidean distances from each row of X to each center.
-        X: (N, D), centers: (M, D)
-        Returns: (N, M)
-        """
-        X32 = X if X.dtype == torch.float32 else X.float()
-        C32 = centers if centers.dtype == torch.float32 else centers.float()
-        return torch.cdist(X32, C32, p=2.0) ** 2
+        """Compute squared distances in FP32 for k-means|| seeding."""
+        X32, C32 = X.float(), centers.float()
+        if self.kernel in _MIXED_KERNELS:
+            return pairwise_squared_distances(X32, C32, precision='fp32', correction='fp32')
+        return torch.cdist(X32, C32).square()
         
     def _init_centers_kmeans_parallel(self, X: torch.Tensor) -> torch.Tensor:
         """

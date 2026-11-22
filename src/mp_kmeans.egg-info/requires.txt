@@ -1,5 +1,0 @@
-numpy>=1.21
-torch>=2.0
-scikit-learn>=1.0
-classixclustering
-pychop

@@ -12,9 +12,9 @@ It provides multiple precision paths (FP16/BF16/FP32/FP64 and mixed fallback mod
 
 ## Features
 
-- Mixed-precision Euclidean distance kernels for GPU k-means.
+- Squared Euclidean distances for GPU k-means via [Euclimix](https://pypi.org/project/euclimix/).
 - Uniform precision modes (`fp16`, `bf16`, `fp32`, `fp64`) and mixed modes (e.g. `fp16_fp32`, `fp16_fp64`).
-- CUDA center update kernels with automatic empty-cluster reinitialization.
+- GPU center updates with automatic empty-cluster reinitialization.
 - Configurable normalization (`standard`, `l2`, `minmax`) for robust behavior on unnormalized datasets.
 
 ## Installation
@@ -23,12 +23,17 @@ It provides multiple precision paths (FP16/BF16/FP32/FP64 and mixed fallback mod
 pip install mp-kmeans
 ```
 
-> This package targets CUDA-enabled environments and depends on PyTorch with CUDA support.
+Installation resolves `euclimix` and PyTorch through pip. The default kernel requires
+Python 3.11 or newer, CUDA-enabled PyTorch, and an NVIDIA Turing or newer GPU (SM75+).
+When pip installs Euclimix from its source distribution, the first GPU call compiles
+its CUDA extension and requires a CUDA toolkit with `nvcc` and a compatible C++ compiler.
+
+From a source checkout, install the optional dependencies for the precision benchmark with
+`python -m pip install '.[benchmark]'`.
 
 ## Quick Start
 
 ```python
-import torch
 from mp_kmeans import KMeansPlusPlus, make_blobs_gpu
 
 X, _ = make_blobs_gpu(
@@ -55,9 +60,17 @@ print(model.n_iter_, model.inertia_)
 
 ## Kernel Modes
 
-- Uniform: `fp16_uniform`, `bf16_uniform`, `tf32_uniform`, `fp32_uniform`, `fp64_uniform`
-- Mixed: `fp16_fp32`, `bf16_fp32`, `fp32_fp32`, `fp16_fp64`, `bf16_fp64`, `tf32_fp64`, `fp32_fp64`
-- Advanced: `fp64_fp16`, `fp64_bf16`, `fp64_tf32`, `fp64_fp32_gemm`
+- Euclimix modes are `fp16_fp32`, `fp16_fp64`, `bf16_fp32`, `bf16_fp64`,
+  `fp32_fp32` (default), and `fp32_fp64`. The suffix selects recomputation precision,
+  and `kappa` is passed to Euclimix as `rho` (greater than 1 and at most 1,000,000).
+  The Euclimix BF16 modes require Ampere or newer (SM80+).
+- PyTorch `cdist` baselines are `fp16`, `bf16`, `fp32`, and `fp64`.
+- Expanded-formula baselines are `fp16_uniform`, `bf16_uniform`, `tf32_uniform`,
+  `fp32_uniform`, and `fp64_uniform`. `tf32_uniform` follows PyTorch's CUDA matmul settings.
+
+The legacy `tf32_fp64`, `fp64_fp16`, `fp64_bf16`, `fp64_tf32`, and `fp64_fp32_gemm`
+kernels have been retired. Use `kernel="fp32"` to select the PyTorch baseline that was
+the default in version 0.1.0.
 
 ## Citation
 
