@@ -64,17 +64,14 @@ The CUDA tests are available as a manual workflow on `main`. The workflow runs o
 
 ## Citation
 
-The paper evaluates synthetic clustering and image segmentation and reports accuracy and convergence comparable to higher-precision baselines on the tested workloads. The reported speedups vary with feature dimension and the number of clusters. [arXiv preprint](https://arxiv.org/abs/2407.12208v4)
+The paper has been accepted for publication in the *SIAM Journal on Scientific Computing*. It evaluates synthetic clustering and image segmentation and reports accuracy and convergence comparable to higher-precision baselines on the tested workloads. The reported speedups vary with feature dimension and the number of clusters. [arXiv preprint](https://arxiv.org/abs/2407.12208v4)
 
 ```bibtex
-@misc{ccl24,
-  author = {Erin Carson and Xinye Chen and Xiaobo Liu},
-  title = {Mixed-Precision {Lloyd}'s Algorithm for $k$-means Clustering},
-  year = {2026},
-  month = nov,
-  eprint = {2407.12208v4},
-  archivePrefix = {arXiv},
-  primaryClass = {math.NA},
-  url = {https://arxiv.org/abs/2407.12208v4}
+@article{carsonMixedPrecisionLloyd,
+  author  = {Erin Carson and Xinye Chen and Xiaobo Liu},
+  title   = {Mixed-Precision {Lloyd}'s Algorithm for $k$-means Clustering},
+  journal = {SIAM Journal on Scientific Computing},
+  year    = {forthcoming},
+  url     = {https://arxiv.org/abs/2407.12208v4}
 }
 ```
