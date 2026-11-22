@@ -1,11 +1,6 @@
 # mp-kmeans
 
-[![CI](https://github.com/inEXASCALE/mp-kmeans/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/inEXASCALE/mp-kmeans/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/mp-kmeans?label=PyPI&logo=pypi&logoColor=white&color=3775A9)](https://pypi.org/project/mp-kmeans/)
-[![Python 3.11–3.14](https://img.shields.io/badge/Python-3.11%20%E2%80%93%203.14-3776AB?logo=python&logoColor=white)](https://github.com/inEXASCALE/mp-kmeans#installation)
-[![CUDA SM75+](https://img.shields.io/badge/CUDA-SM75%2B-517600?logo=nvidia&logoColor=white)](https://github.com/inEXASCALE/mp-kmeans#installation)
-[![arXiv:2407.12208](https://img.shields.io/badge/arXiv-2407.12208-B31B1B?logo=arxiv&logoColor=white)](https://arxiv.org/abs/2407.12208v4)
-[![License: MIT](https://img.shields.io/badge/License-MIT-64748B)](https://github.com/inEXASCALE/mp-kmeans/blob/main/LICENSE)
+[![CI](https://github.com/inEXASCALE/mp-kmeans/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/inEXASCALE/mp-kmeans/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/mp-kmeans?label=PyPI&logo=pypi&logoColor=white&color=3775A9)](https://pypi.org/project/mp-kmeans/) [![Python 3.11–3.14](https://img.shields.io/badge/Python-3.11%20%E2%80%93%203.14-3776AB?logo=python&logoColor=white)](https://github.com/inEXASCALE/mp-kmeans#installation) [![CUDA SM75+](https://img.shields.io/badge/CUDA-SM75%2B-517600?logo=nvidia&logoColor=white)](https://github.com/inEXASCALE/mp-kmeans#installation) [![arXiv:2407.12208](https://img.shields.io/badge/arXiv-2407.12208-B31B1B?logo=arxiv&logoColor=white)](https://arxiv.org/abs/2407.12208v4) [![License: MIT](https://img.shields.io/badge/License-MIT-64748B)](https://github.com/inEXASCALE/mp-kmeans/blob/main/LICENSE)
 
 `mp-kmeans` is a CUDA-accelerated k-means library for PyTorch. Its mixed-precision modes compute squared Euclidean distances with Euclimix and selectively recompute them using the direct distance formula.
 
