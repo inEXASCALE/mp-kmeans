@@ -1,6 +1,4 @@
-"""
-KMeans++ with Multi-Precision Support and Normalization
-"""
+"""CUDA k-means with configurable precision and normalization."""
 import math
 import time
 from typing import Optional, Tuple, Literal
@@ -27,9 +25,8 @@ _BASELINE_DTYPES = {
 
 
 class KMeansPlusPlus:
-    """
-    KMeans++ clustering with multiple precision modes and normalization
-    
+    """K-means clustering with configurable precision, normalization, and initialization.
+
     Normalization options:
     - None: No normalization
     - 'l2': L2 normalization (unit vectors)
@@ -92,9 +89,8 @@ class KMeansPlusPlus:
         return _BASELINE_DTYPES.get(self.kernel, torch.float32)
     
     def _normalize_data(self, X: torch.Tensor, fit: bool = True) -> torch.Tensor:
-        """
-        Normalize data according to self.normalize
-        
+        """Normalize data according to the configured method.
+
         Args:
             X: Input data (N, D)
             fit: If True, learn normalization parameters from X
@@ -150,8 +146,7 @@ class KMeansPlusPlus:
         X, centers = X.to(dtype), centers.to(dtype)
         low_precision = dtype in (torch.float16, torch.bfloat16)
         if self.kernel.endswith('_uniform'):
-            # The uniform baselines store the norms and cross products in the
-            # selected dtype before forming the expanded squared distance.
+            # The uniform baselines store the norms and cross products in the selected dtype before forming the expanded squared distance.
             points = X.float() if low_precision else X
             refs = centers.float() if low_precision else centers
             x_norm = points.square().sum(dim=1, keepdim=True).to(dtype).to(points.dtype)
@@ -249,17 +244,12 @@ class KMeansPlusPlus:
         return self._compute_distances(X_normalized, self.cluster_centers_).argmin(dim=1)
 
     def fit_predict(self, X: torch.Tensor) -> torch.Tensor:
-        """Fit and return cluster labels"""
+        """Fit the model and return the training labels."""
         self.fit(X)
         return self.labels_
     
     def get_cluster_centers_original_space(self) -> torch.Tensor:
-        """
-        Get cluster centers in original (un-normalized) space
-        
-        Returns:
-            Centers in original space
-        """
+        """Return cluster centers in the input space when normalization can be inverted."""
         if self.cluster_centers_ is None:
             raise RuntimeError("Model not fitted yet")
         
@@ -289,10 +279,7 @@ class KMeansPlusPlus:
         if method in ("kmeans||", "k-means||", "kmeansparallel"):
             return self._init_centers_kmeans_parallel(X)
 
-        raise ValueError(
-            f"Unknown init_method={self.init_method!r}. "
-            f"Expected one of: 'random', 'kmeans++', 'kmeans||'."
-        )
+        raise ValueError(f"Unknown init_method={self.init_method!r}. Expected one of 'random', 'kmeans++', and 'kmeans||'.")
         
     def _make_generator(self, device: torch.device) -> torch.Generator:
         g = torch.Generator(device=device)
@@ -441,9 +428,8 @@ class KMeansPlusPlus:
         return torch.cdist(X32, C32).square()
         
     def _init_centers_kmeans_parallel(self, X: torch.Tensor) -> torch.Tensor:
-        """
-        Tensorized k-means|| initialization under squared Euclidean distance.
-    
+        """Initialize centers with k-means|| using squared Euclidean distances.
+
         Procedure:
         1. Sample one initial center uniformly.
         2. Run R rounds of parallel D^2-sampling with oversampling factor l.
@@ -466,10 +452,7 @@ class KMeansPlusPlus:
             R = max(1, int(math.ceil(math.log2(N + 1))))
     
         if self.verbose:
-            print(
-                f"KMeans|| initialization (kernel: {self.kernel}, normalize: {self.normalize}, "
-                f"oversampling={l}, rounds={R})..."
-            )
+            print(f"KMeans|| initialization (kernel: {self.kernel}, normalize: {self.normalize}, oversampling={l}, rounds={R})...")
     
         # First center
         first_idx = torch.randint(0, N, (1,), generator=g, device=device)
@@ -515,7 +498,7 @@ class KMeansPlusPlus:
         candidates = X[candidate_indices]   # original dtype for returned centers
     
         if candidates.shape[0] == 0:
-            # Extremely defensive fallback
+            # Use random initialization if no candidates were sampled.
             return self._init_centers_random(X)
     
         # Assign weights to candidates
@@ -525,10 +508,7 @@ class KMeansPlusPlus:
         # If candidates are fewer than required centers, pad by random sampling
         if candidates.shape[0] < self.n_clusters:
             if self.verbose:
-                print(
-                    f"  Only {candidates.shape[0]} unique candidates for K={self.n_clusters}; "
-                    f"padding with random points."
-                )
+                print(f"  Found {candidates.shape[0]} unique candidates for {self.n_clusters} clusters. Sampling additional points.")
     
             extra_needed = self.n_clusters - candidates.shape[0]
             extra_idx = torch.randint(0, N, (extra_needed,), generator=g, device=device)
@@ -554,9 +534,8 @@ def make_blobs_gpu(
     random_state: Optional[int] = None,
     return_centers: bool = False
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Generate Gaussian blobs on GPU
-    
+    """Generate Gaussian blobs on the GPU.
+
     Args:
         n_samples: Number of samples
         n_features: Number of features

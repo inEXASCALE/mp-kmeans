@@ -1,7 +1,4 @@
-"""
-Comprehensive KMeans precision mode comparison with sklearn baseline
-Tests: speed, convergence, accuracy (AMI, ARI, SSE)
-"""
+"""Compare k-means precision modes against the PyTorch FP64 baseline using runtime, iteration count, AMI, ARI, and SSE."""
 import torch
 import numpy as np
 import time
@@ -38,12 +35,7 @@ def set_all_seeds(seed: int):
 
 
 def compute_metrics(y_true: torch.Tensor, y_pred: torch.Tensor, inertia: float) -> Dict[str, float]:
-    """
-    Compute clustering metrics
-    
-    Returns:
-        dict with AMI, ARI, and SSE
-    """
+    """Return AMI, ARI, and SSE for the clustering result."""
     y_true_cpu = y_true.cpu().numpy()
     y_pred_cpu = y_pred.cpu().numpy()
     
@@ -64,12 +56,7 @@ def benchmark_sklearn_baseline(
     n_runs: int = 3,
     verbose: bool = False
 ) -> Dict:
-    """
-    Benchmark sklearn KMeans as baseline
-    
-    Returns:
-        Dictionary with averaged results
-    """
+    """Benchmark scikit-learn KMeans on the CPU and return the averaged results."""
     if verbose:
         print(f"\n{'='*80}")
         print(f"Testing sklearn KMeans (CPU baseline)")
@@ -146,12 +133,7 @@ def benchmark_kernel(
     n_runs: int = 3,
     verbose: bool = False
 ) -> Optional[Dict]:
-    """
-    Benchmark a single kernel with multiple runs
-    
-    Returns:
-        Dictionary with averaged results
-    """
+    """Benchmark one kernel and return the results averaged across runs."""
     if verbose:
         print(f"\n{'='*80}")
         print(f"Testing kernel: {kernel} (kappa={kappa})")
@@ -203,7 +185,7 @@ def benchmark_kernel(
                 print(f"  AMI: {metrics['AMI']:.4f}, ARI: {metrics['ARI']:.4f}, SSE: {metrics['SSE']:.2f}")
         
         except Exception as e:
-            print(f"  ⚠️ Error: {e}")
+            print(f"  Error: {e}")
             return None
     
     # Compute averages (excluding warmup for time)
@@ -226,9 +208,8 @@ def benchmark_kernel(
 
 
 def save_results_to_json(all_results: List[Dict], config: Dict, output_file: str = None):
-    """
-    Save benchmark results to JSON file
-    
+    """Save benchmark results to a JSON file.
+
     Args:
         all_results: List of result dictionaries
         config: Benchmark configuration parameters
@@ -273,8 +254,14 @@ def save_results_to_json(all_results: List[Dict], config: Dict, output_file: str
     with open(output_file, 'w') as f:
         json.dump(json_data, f, indent=2)
     
-    print(f"\n💾 Results saved to: {output_file}")
+    print(f"\nResults saved to {output_file}")
     return output_file
+
+
+def _format_speedup(fp64_baseline_time: float, elapsed_time: float) -> str:
+    if not (0 < fp64_baseline_time < np.inf and 0 < elapsed_time < np.inf):
+        return 'N/A'
+    return f'{fp64_baseline_time / elapsed_time:.2f}x'
 
 
 def run_comprehensive_benchmark(
@@ -288,11 +275,9 @@ def run_comprehensive_benchmark(
     save_json: bool = True,
     output_file: str = None
 ):
-    """
-    Run comprehensive benchmark across all kernels
-    """
+    """Benchmark the available k-means precision modes on synthetic data."""
     print("\n" + "="*100)
-    print(f"🚀 KMEANS++ PRECISION MODE BENCHMARK")
+    print("K-means precision benchmark")
     print("="*100)
     print(f"\nDataset:")
     print(f"  Samples:   {n_samples:,}")
@@ -333,7 +318,7 @@ def run_comprehensive_benchmark(
     ]
     
     
-    kernels_mixed_mix = [
+    kernels_mixed = [
         ('FP16+FP32 (mixed)', 'fp16_fp32', kappa_values),
         ('BF16+FP32 (mixed)', 'bf16_fp32', kappa_values),
         ('FP32+FP32 (mixed)', 'fp32_fp32', kappa_values),
@@ -344,11 +329,11 @@ def run_comprehensive_benchmark(
     
 
     all_results = []
-    baseline_time = 0.0
+    fp64_baseline_time = 0.0
 
     # Test uniform precision
     print("\n" + "="*100)
-    print("CATEGORY 1: UNIFORM PRECISION (PyTorch baselines)")
+    print("Uniform precision (PyTorch baselines)")
     print("="*100)
     
     for name, kernel, kappa in kernels_uniform:
@@ -357,24 +342,24 @@ def run_comprehensive_benchmark(
             result['name'] = name
             all_results.append(result)
             print(f"{name:<30} | Time: {result['avg_time']:.3f}s | Iter: {result['avg_iterations']:.1f} | AMI: {result['avg_AMI']:.4f}")
-            if name == 'FP64 (uniform, PyTorch)':
-                baseline_time = result['avg_time'] 
+            if kernel == 'fp64':
+                fp64_baseline_time = result['avg_time']
         
         else:
             print(f" {name:<30} | FAILED")
 
     print(f"\n{'='*100}")
-    print("CATEGORY 2: EUCLIMIX (FP32 or FP64 fallback)")
+    print("Euclimix (FP32 or FP64 fallback)")
     print("="*100)
     
-    for name, kernel, kappas in kernels_mixed_mix:
+    for name, kernel, kappas in kernels_mixed:
         if kernel.startswith('bf16_') and torch.cuda.get_device_capability(X.device) < (8, 0):
             print(f"{name:<30} | SKIPPED (requires SM80+)")
             continue
         for kappa in kappas:
+            full_name = f"{name} (κ={kappa})"
             result = benchmark_kernel(X, y_true, n_clusters, kernel, kappa, n_runs, verbose)
             if result:
-                full_name = f"{name} (κ={kappa})"
                 result['name'] = full_name
                 all_results.append(result)
                 print(f"{full_name:<35} | Time: {result['avg_time']:.3f}s | Iter: {result['avg_iterations']:.1f} | AMI: {result['avg_AMI']:.4f}")
@@ -382,9 +367,9 @@ def run_comprehensive_benchmark(
                 print(f" {full_name:<35} | FAILED")
     
     print(f"\n{'='*130}")
-    print(f"{'COMPREHENSIVE SUMMARY':<130}")
+    print("Benchmark results")
     print(f"{'='*130}")
-    print(f"{'Method':<35} {'Avg Time':>12} {'Speedup':>10} {'Iterations':>12} {'AMI':>10} {'ARI':>10} {'SSE':>12}")
+    print(f"{'Method':<35} {'Avg Time':>12} {'Speedup vs. PyTorch FP64':>24} {'Iterations':>12} {'AMI':>10} {'ARI':>10} {'SSE':>12}")
     print(f"{'-'*130}")
     
     # Sort by time
@@ -392,41 +377,41 @@ def run_comprehensive_benchmark(
     
     
     for result in all_results_sorted:
-        speedup = baseline_time / result['avg_time']
-        print(f"{result['name']:<35} {result['avg_time']:>10.3f}s {speedup:>9.2f}x "
-              f"{result['avg_iterations']:>11.1f} {result['avg_AMI']:>10.4f} "
+        speedup = _format_speedup(fp64_baseline_time, result['avg_time'])
+        print(f"{result['name']:<35} {result['avg_time']:>11.3f}s {speedup:>24} "
+              f"{result['avg_iterations']:>12.1f} {result['avg_AMI']:>10.4f} "
               f"{result['avg_ARI']:>10.4f} {result['avg_SSE']:>12.2f}")
     
     print(f"{'='*130}\n")
     
     # Analysis
-    print("🔍 KEY FINDINGS:\n")
+    print("Summary\n")
     
     # Fastest
     fastest = min(all_results, key=lambda x: x['avg_time'])
-    speedup_vs_sklearn = baseline_time / fastest['avg_time']
-    print(f"   🏆 Fastest:           {fastest['name']:<35} ({fastest['avg_time']:.3f}s, {speedup_vs_sklearn:.1f}x faster than sklearn)")
+    fastest_speedup = _format_speedup(fp64_baseline_time, fastest['avg_time'])
+    print(f"   Shortest runtime: {fastest['name']} ({fastest['avg_time']:.3f}s, speedup vs. PyTorch FP64: {fastest_speedup})")
     
     # Most accurate (highest AMI)
     most_accurate = max(all_results, key=lambda x: x['avg_AMI'])
-    print(f"   🎯 Most Accurate:     {most_accurate['name']:<35} (AMI: {most_accurate['avg_AMI']:.4f})")
+    print(f"   Highest AMI: {most_accurate['name']} (AMI: {most_accurate['avg_AMI']:.4f})")
     
-    # Best balance (fast + accurate, AMI > 0.95, lowest time)
+    # Shortest runtime among modes with AMI above 0.95
     balanced = [r for r in all_results if r['avg_AMI'] > 0.95]
     if balanced:
         best_balanced = min(balanced, key=lambda x: x['avg_time'])
-        speedup_balanced = baseline_time / best_balanced['avg_time']
-        print(f"   ⚖️  Best Balance:      {best_balanced['name']:<35} ({best_balanced['avg_time']:.3f}s, AMI: {best_balanced['avg_AMI']:.4f}, {speedup_balanced:.1f}x vs sklearn)")
+        speedup_balanced = _format_speedup(fp64_baseline_time, best_balanced['avg_time'])
+        print(f"   Fastest with AMI > 0.95: {best_balanced['name']} ({best_balanced['avg_time']:.3f}s, AMI: {best_balanced['avg_AMI']:.4f}, speedup vs. PyTorch FP64: {speedup_balanced})")
     
     # Convergence comparison
     fastest_converge = min(all_results, key=lambda x: x['avg_iterations'])
     slowest_converge = max(all_results, key=lambda x: x['avg_iterations'])
     print(f"\n   Convergence:")
-    print(f"      Fastest: {fastest_converge['name']:<35} ({fastest_converge['avg_iterations']:.1f} iterations)")
-    print(f"      Slowest: {slowest_converge['name']:<35} ({slowest_converge['avg_iterations']:.1f} iterations)")
+    print(f"      Fewest iterations: {fastest_converge['name']} ({fastest_converge['avg_iterations']:.1f})")
+    print(f"      Most iterations: {slowest_converge['name']} ({slowest_converge['avg_iterations']:.1f})")
     
     # Accuracy comparison
-    print(f"\n   🎯 Accuracy (AMI):")
+    print("\n   Accuracy (AMI):")
     uniform_results = [r for r in all_results if 'uniform' in r['name']]
     mixed_results = [r for r in all_results if 'mixed' in r['name']]
     
@@ -439,12 +424,12 @@ def run_comprehensive_benchmark(
         print(f"      Mixed modes:       {avg_ami_mixed:.4f} (avg)")
         if uniform_results:
             improvement = (avg_ami_mixed - avg_ami_uniform) / avg_ami_uniform * 100
-            print(f"      Improvement:       {improvement:+.2f}%")
+            print(f"      Relative AMI difference: {improvement:+.2f}%")
     
     print()
     
     # Kappa analysis (if multiple kappas tested)
-    print("   🎚️  Kappa Parameter Analysis:")
+    print("   Results by kappa:")
     kappa_groups = {}
     for r in all_results:
         if 'mixed' in r['name'] or 'advanced' in r['name']:
@@ -457,33 +442,31 @@ def run_comprehensive_benchmark(
         if len(results_group) > 1:
             print(f"\n      {base_name}:")
             for r in sorted(results_group, key=lambda x: x['kappa']):
-                speedup = baseline_time / r['avg_time']
-                print(f"        κ={r['kappa']:<5} → Time: {r['avg_time']:.3f}s ({speedup:.1f}x), AMI: {r['avg_AMI']:.4f}, Iter: {r['avg_iterations']:.1f}")
+                speedup = _format_speedup(fp64_baseline_time, r['avg_time'])
+                print(f"        κ={r['kappa']:<5} Time: {r['avg_time']:.3f}s, speedup vs. PyTorch FP64: {speedup}, AMI: {r['avg_AMI']:.4f}, iterations: {r['avg_iterations']:.1f}")
     
     print("\n" + "="*130)
-    print("💡 RECOMMENDATIONS")
+    print("Rankings for this benchmark")
     print("="*130 + "\n")
     
-    print("Based on the results:\n")
-    
-    print("🟢 For SPEED priority:")
+    print("By runtime:")
     fastest_3 = all_results_sorted[:3]
     for i, r in enumerate(fastest_3, 1):
-        speedup = baseline_time / r['avg_time']
-        print(f"   {i}. {r['name']:<40} ({r['avg_time']:.3f}s, {speedup:.1f}x vs sklearn, AMI: {r['avg_AMI']:.4f})")
+        speedup = _format_speedup(fp64_baseline_time, r['avg_time'])
+        print(f"   {i}. {r['name']:<40} ({r['avg_time']:.3f}s, speedup vs. PyTorch FP64: {speedup}, AMI: {r['avg_AMI']:.4f})")
     
-    print("\n🟡 For ACCURACY priority:")
+    print("\nBy AMI:")
     accurate_3 = sorted(all_results, key=lambda x: x['avg_AMI'], reverse=True)[:3]
     for i, r in enumerate(accurate_3, 1):
-        speedup = baseline_time / r['avg_time']
-        print(f"   {i}. {r['name']:<40} (AMI: {r['avg_AMI']:.4f}, {r['avg_time']:.3f}s, {speedup:.1f}x)")
+        speedup = _format_speedup(fp64_baseline_time, r['avg_time'])
+        print(f"   {i}. {r['name']:<40} (AMI: {r['avg_AMI']:.4f}, {r['avg_time']:.3f}s, speedup vs. PyTorch FP64: {speedup})")
     
-    print("\n🟢 For BALANCED performance:")
     if balanced:
+        print("\nBy runtime with AMI > 0.95:")
         balanced_3 = sorted(balanced, key=lambda x: x['avg_time'])[:3]
         for i, r in enumerate(balanced_3, 1):
-            speedup = baseline_time / r['avg_time']
-            print(f"   {i}. {r['name']:<40} ({r['avg_time']:.3f}s, {speedup:.1f}x, AMI: {r['avg_AMI']:.4f})")
+            speedup = _format_speedup(fp64_baseline_time, r['avg_time'])
+            print(f"   {i}. {r['name']:<40} ({r['avg_time']:.3f}s, speedup vs. PyTorch FP64: {speedup}, AMI: {r['avg_AMI']:.4f})")
     
     print("\n" + "="*130 + "\n")
     
@@ -496,7 +479,7 @@ def run_comprehensive_benchmark(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description='KMeans++ multi-precision benchmark with sklearn baseline',
+        description='K-means precision benchmark with a PyTorch FP64 baseline.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
                 Examples:
@@ -525,12 +508,12 @@ if __name__ == "__main__":
     
     # Check CUDA
     if not torch.cuda.is_available():
-        print(" CUDA not available!")
+        print("CUDA is unavailable.")
         exit(1)
     
     # Print system info
     print("\n" + "="*100)
-    print("🖥️  System Information")
+    print("System information")
     print("="*100)
     print(f"GPU:     {torch.cuda.get_device_name(0)}")
     print(f"CUDA:    {torch.version.cuda}")
@@ -542,12 +525,12 @@ if __name__ == "__main__":
         args.n_samples = 10000
         args.n_features = 64
         args.n_clusters = 10
-        print("\n🔸 Running SMALL test")
+        print("\nRunning the small benchmark")
     elif args.large:
         args.n_samples = 500000
         args.n_features = 256
         args.n_clusters = 100
-        print("\n🔶 Running LARGE test")
+        print("\nRunning the large benchmark")
     
     # Run benchmark
     results = run_comprehensive_benchmark(
