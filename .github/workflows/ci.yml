@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12', '3.13', '3.14']
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Build and check the distributions
+        run: |
+          python -m pip install build twine
+          python -m build --outdir "$RUNNER_TEMP/mp-kmeans-dist"
+          python -m twine check --strict "$RUNNER_TEMP/mp-kmeans-dist/"*
+      - name: Install the wheel with CPU PyTorch
+        run: |
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu "torch==2.15.0"
+          python -m pip install "$RUNNER_TEMP/mp-kmeans-dist/"*.whl
+          python -m pip check
+      - name: Run CPU tests
+        run: python -I -m unittest discover -s tests -v

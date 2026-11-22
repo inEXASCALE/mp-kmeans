@@ -1,0 +1,39 @@
+name: CUDA tests
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cuda:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, x64, gpu]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Check the CUDA toolkit
+        run: nvcc --version
+      - name: Install mp-kmeans
+        run: |
+          python3 -m venv "$RUNNER_TEMP/mp-kmeans-venv"
+          test_python="$RUNNER_TEMP/mp-kmeans-venv/bin/python"
+          "$test_python" -m pip install . "torch==2.15.0"
+          "$test_python" -m pip check
+      - name: Check the GPU and run integration tests
+        env:
+          MAX_JOBS: '2'
+          TORCH_EXTENSIONS_DIR: ${{ runner.temp }}/mp-kmeans-torch-extensions
+        run: |
+          test_python="$RUNNER_TEMP/mp-kmeans-venv/bin/python"
+          "$test_python" -I - <<'PY'
+          import torch
+
+          if not torch.cuda.is_available() or torch.cuda.get_device_capability() < (7, 5):
+              raise SystemExit("CUDA tests require an NVIDIA GPU with compute capability 7.5 or newer.")
+          print(torch.cuda.get_device_name(), torch.cuda.get_device_capability())
+          PY
+          "$test_python" -I -m unittest discover -s tests -v

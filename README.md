@@ -1,8 +1,11 @@
 # mp-kmeans
 
-[![!pypi](https://img.shields.io/pypi/v/mp-kmeans?color=yellowgreen)](https://pypi.org/project/mp-kmeans/)
-[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mp-kmeans)](https://pypi.org/project/mp-kmeans/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/inEXASCALE/mp-kmeans/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/inEXASCALE/mp-kmeans/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/mp-kmeans?label=PyPI&logo=pypi&logoColor=white&color=3775A9)](https://pypi.org/project/mp-kmeans/)
+[![Python 3.11–3.14](https://img.shields.io/badge/Python-3.11%20%E2%80%93%203.14-3776AB?logo=python&logoColor=white)](https://github.com/inEXASCALE/mp-kmeans#installation)
+[![CUDA SM75+](https://img.shields.io/badge/CUDA-SM75%2B-517600?logo=nvidia&logoColor=white)](https://github.com/inEXASCALE/mp-kmeans#installation)
+[![arXiv:2407.12208](https://img.shields.io/badge/arXiv-2407.12208-B31B1B?logo=arxiv&logoColor=white)](https://arxiv.org/abs/2407.12208v4)
+[![License: MIT](https://img.shields.io/badge/License-MIT-64748B)](https://github.com/inEXASCALE/mp-kmeans/blob/main/LICENSE)
 
 `mp-kmeans` is a CUDA-accelerated k-means library for PyTorch. Its mixed-precision modes compute squared Euclidean distances with Euclimix and selectively recompute them using the direct distance formula.
 
@@ -57,6 +60,12 @@ print(model.n_iter_, model.inertia_)
 - Expanded-formula baselines are `fp16_uniform`, `bf16_uniform`, `tf32_uniform`, `fp32_uniform`, and `fp64_uniform`. `tf32_uniform` follows PyTorch's CUDA matmul settings.
 
 Version 0.1.1 removed `tf32_fp64`, `fp64_fp16`, `fp64_bf16`, `fp64_tf32`, and `fp64_fp32_gemm`. Use `kernel="fp32"` to select the PyTorch baseline that was the default in version 0.1.0.
+
+## Testing
+
+GitHub Actions builds the wheel and source distribution, checks the package metadata, and runs CPU tests against the installed wheel on Python 3.11–3.14.
+
+The CUDA tests are available as a manual workflow on `main`. The workflow runs on a self-hosted Linux x86-64 runner labeled `gpu` with Python 3.11 or later, an NVIDIA SM75+ GPU, and a CUDA toolkit with `nvcc` on `PATH`. [CUDA workflow](https://github.com/inEXASCALE/mp-kmeans/actions/workflows/cuda.yml)
 
 ## Citation
 

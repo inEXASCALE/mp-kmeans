@@ -28,6 +28,29 @@ class DistanceDispatchTests(unittest.TestCase):
                         'precision': precision, 'correction': correction, 'rho': 7.5,
                     })
 
+    def test_pytorch_baselines_return_squared_distances(self):
+        X = torch.tensor([[0., 0.], [3., 4.]])
+        centers = torch.tensor([[0., 0.], [3., 0.]])
+        expected = torch.tensor([[0., 9.], [25., 16.]])
+
+        for kernel, dtype in (('fp32', torch.float32), ('fp64', torch.float64)):
+            with self.subTest(kernel=kernel):
+                model = KMeansPlusPlus(2, kernel=kernel)
+                torch.testing.assert_close(model._compute_distances(X, centers), expected.to(dtype))
+
+
+class CenterUpdateTests(unittest.TestCase):
+    def test_center_update_averages_points_and_reinitializes_empty_clusters(self):
+        X = torch.tensor([[0., 2.], [2., 4.], [6., 8.]], dtype=torch.float64)
+        labels = torch.tensor([0, 0, 1])
+        model = KMeansPlusPlus(3)
+        generator = torch.Generator().manual_seed(42)
+
+        centers = model._update_centers(X, labels, generator)
+
+        torch.testing.assert_close(centers[:2], X.new_tensor([[1., 3.], [6., 8.]]))
+        self.assertTrue((X == centers[2]).all(dim=1).any().item())
+
 
 @unittest.skipUnless(
     torch.cuda.is_available() and torch.cuda.get_device_capability() >= (7, 5),
