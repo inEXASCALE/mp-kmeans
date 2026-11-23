@@ -6,7 +6,6 @@
 
 ## Features
 
-- Squared Euclidean distances for GPU k-means via [Euclimix](https://pypi.org/project/euclimix/).
 - Uniform precision modes (`fp16`, `bf16`, `fp32`, `fp64`) and mixed modes (e.g. `fp16_fp32`, `fp16_fp64`).
 - GPU center updates with automatic empty-cluster reinitialization.
 - Configurable normalization (`standard`, `l2`, `minmax`) for robust behavior on unnormalized datasets.
